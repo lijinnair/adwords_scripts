@@ -15,7 +15,7 @@ The script helps you, to stop all your campaigns of an merchant center account i
 
 == Installation ==
 
-* Open following spreadsheet: https://docs.google.com/spreadsheets/d/1-h8lkQ3b-LfNM6WyRPTWF0bOuaeGIWHOs_LqJD0GQAI/edit#gid=517352810
+* Open following spreadsheet: https://goo.gl/QoXI4k
 * Follow instructions of the Installation Manual (first tab of the spreadsheet)
 
 == Important security note ==
