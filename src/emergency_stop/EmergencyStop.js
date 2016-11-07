@@ -46,8 +46,9 @@ var SP_RANGE = null;
 
 try{
    SPREADSHEET = SpreadsheetApp.openByUrl(SPREADSHEET_URL);
-   var SHEET = SPREADSHEET.getSheetByName("Settings");
-   var DATA = checkSpreadsheedData(SPREADSHEET.getRangeByName("settings").getValues());
+   SHEET = SPREADSHEET.getSheetByName("Settings");
+   SP_RANGE = SPREADSHEET.getRangeByName("settings");
+   DATA = checkSpreadsheedData(SPREADSHEET.getRangeByName("settings").getValues());
 }catch(e){
   throw 'CAN NOT ACCESS SPREADSHEET. PLEASE CHECK THE URL AND YOUR PERMISSIONS TO THE SHEET (for the user who runs the script in AdWords)!';
 }
