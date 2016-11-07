@@ -17,27 +17,40 @@
 *  limitations under the License.
 *
 *  @author: Alexander Giebelhaus
-*  @version: 1.0
+*  @version: 1.1 (Script-Version)
 *
 ***********************************************************************************************/
 
 // Script Settings
-var SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1WDVRrg6-4HcEltNWNM6cIOONXARMrtLYFKdvQiAyg88/edit#gid=325670813&vpid=A1";
+var SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1Cad0D7_GWfvUwrQoN_lW0vb8sSTCpNh22r4HkLb6FMw/edit#gid=325670813";
 var PAUSED_LABEL = "EmergencyStop";
 var EMAIL_SUBJECT = "EmergencyStop";
 
-// Get data from setting tab
-var SPREADSHEET = SpreadsheetApp.openByUrl(SPREADSHEET_URL);
-var SHEET = SPREADSHEET.getSheetByName("Settings");
-var DATA = cleanSpreadsheedData(SPREADSHEET.getRangeByName("settings").getValues());
-
 // Script to sheet mapping
-var ACCOUNT_IDS_SHEETROW = 0;
-var ACCOUNTNAMES_SHEETROW = 1;
-var EMAILS_SHEETROW = 8;
-var PAUSEDDATE_SHEETROW = 6;
-var ACTIVATEDDATE_SHEETROW = 7;
-var OFFSET_TO_TOP=7;
+var SHEETCOLS = {
+  'ACCOUNT_IDS':0,
+  'ACCOUNTNAMES':1,
+  'EMAILS':8,
+  'PAUSEDDATE':6,
+  'ACTIVATEDDATE':7,
+  'PAUSED_CAMPAIGNS':3,
+  'ESTOP':5,
+  'ERRORS':9
+};
+
+// Get data from setting tab
+var SPREADSHEET = null;
+var SHEET = null;
+var DATA = null;
+var SP_RANGE = null;
+
+try{
+   SPREADSHEET = SpreadsheetApp.openByUrl(SPREADSHEET_URL);
+   var SHEET = SPREADSHEET.getSheetByName("Settings");
+   var DATA = checkSpreadsheedData(SPREADSHEET.getRangeByName("settings").getValues());
+}catch(e){
+  throw 'CAN NOT ACCESS SPREADSHEET. PLEASE CHECK THE URL AND YOUR PERMISSIONS TO THE SHEET (for the user who runs the script in AdWords)!';
+}
 
 var actionEnum = {
   YES: 'yes',
@@ -48,11 +61,13 @@ var actionEnum = {
   * @desc This Function will be called from google to start the script
 */
 function main() {  
-  if (DATA) { 
+  if(SPREADSHEET_URL == 'https://docs.google.com/spreadsheets/d/1Cad0D7_GWfvUwrQoN_lW0vb8sSTCpNh22r4HkLb6FMw/edit#gid=325670813'){
+        throw 'SPREADSHEET_URL WAS NOT REPLACED TO YOUR OWN SPREADSHEET!';
+  }
+  
+  if (DATA && DATA.length > 0) {
     // Execute all accounts in parallel
-    MccApp.accounts().withIds(getColumnFromRange(DATA,ACCOUNT_IDS_SHEETROW)).executeInParallel("execInParallel","finalExecution"); 
-  }else{
-    Logger.log("No data to process found. Please fill the spreadsheet accordingly!");
+    MccApp.accounts().withIds(getColumnFromRange(DATA,SHEETCOLS.ACCOUNT_IDS)).executeInParallel("execInParallel","finalExecution");
   }
 }
 
@@ -75,14 +90,13 @@ function execInParallel(){
     paused_campaigns: 0,
     paused_shopping_campaigns: 0,
     sheet_current_row_index: 0,
-    activated_count: 0,
     emails: null,
     errors: null
-  }
+  };
 
   // Set the actual values for the dataObject
   dataObject.accountid = account.getCustomerId();
-  dataObject.sheet_current_row_index = getColumnFromRange(DATA, ACCOUNT_IDS_SHEETROW).indexOf(dataObject.accountid);
+  dataObject.sheet_current_row_index = getColumnFromRange(DATA, SHEETCOLS.ACCOUNT_IDS).indexOf(dataObject.accountid);
   dataObject.accountname = account.getName();
 
   // Get all informations of the sheet row based on the current accountId e.g. email, scheduling data
@@ -98,10 +112,10 @@ function execInParallel(){
 
   // If a schedule date is set, calculate the date range and set action to 'yes' when current date is in range ('no' if the date is after the activation date)
   // else read only the value of the EmergencyStop cell and set it as action value.
-  if(account_data[PAUSEDDATE_SHEETROW] != "" && account_data[ACTIVATEDDATE_SHEETROW] != ""){
+  if(account_data[SHEETCOLS.PAUSEDDATE] !== "" && account_data[SHEETCOLS.ACTIVATEDDATE] !== ""){
       var now = new Date();
-      var pausedDate = new Date(account_data[PAUSEDDATE_SHEETROW]);
-      var activationDate = new Date(account_data[ACTIVATEDDATE_SHEETROW]);
+      var pausedDate = new Date(account_data[SHEETCOLS.PAUSEDDATE]);
+      var activationDate = new Date(account_data[SHEETCOLS.ACTIVATEDDATE]);
 
       if(Number(pausedDate) <= Number(now) && Number(activationDate) > Number(now)){
         action = actionEnum.YES;
@@ -109,10 +123,13 @@ function execInParallel(){
         action = actionEnum.NO;
       }
      // Change EmergencyStop value in the spreadsheet based on the current action
-     SHEET.getRange('H'+(dataObject.sheet_current_row_index+OFFSET_TO_TOP)).setValue(action);
+     SP_RANGE.getCell(dataObject.sheet_current_row_index+1,SHEETCOLS.ESTOP+1).setValue(action);
   }else{
     action = account_data[5];
   }
+
+  // Create label if it does not exist
+  createLabelIfNotExist();
 
   // Get the campaigns to iterate over (depending on the action and type of campaign)
   if(action == actionEnum.YES){
@@ -124,15 +141,11 @@ function execInParallel(){
   }
 
   // Analyse the campaigns (normal ones and shopping) and update the data object, if an action is set and no error occured
-  if(action != null && dataObject.errors == null){
-
-    // Create label if it does not exist
-    createLabelIfNotExist();
-
-    if (campaigns.totalNumEntities() >  0) {
+  if(action !== null && dataObject.errors === null){
+    if (campaigns !== null && campaigns.totalNumEntities() >  0) {
       dataObject = analyseCampaigns(campaigns,action,dataObject);
     }
-    if (shoppingCampaigns.totalNumEntities() >  0) {
+    if (shoppingCampaigns !== null && shoppingCampaigns.totalNumEntities() >  0) {
       dataObject = analyseCampaigns(shoppingCampaigns,action,dataObject);
     }
   }
@@ -208,12 +221,14 @@ function sendEmail(email,subject,text)
 
   // Send email to the given addresses
   for(var i = 0; i < emailaddys.length; i++){
-    if(validateEmail(emailaddys[i].trim())){
-      MailApp.sendEmail({
-        to: emailaddys[i].trim(),
-        subject: subject,
-        htmlBody: text
-      });
+    if(emailaddys[i] !== null && validateEmail(emailaddys[i].trim())){
+     if (!AdWordsApp.getExecutionInfo().isPreview()) {
+        MailApp.sendEmail({
+          to: emailaddys[i].trim(),
+          subject: subject,
+          htmlBody: text
+        });
+      }
     }
   }
 }
@@ -228,20 +243,22 @@ function extractAndCheckEmail(account_data){
     var valid=true;
 
     // Get the email address(es) from the corresponding sheet cell
-    if(account_data[EMAILS_SHEETROW] != ''){
-      if(account_data[EMAILS_SHEETROW].indexOf(',') != -1){
-        emails = account_data[EMAILS_SHEETROW].split(",");
+    if(account_data[SHEETCOLS.EMAILS] !== ''){
+      if(account_data[SHEETCOLS.EMAILS].indexOf(',') != -1){
+        emails = account_data[SHEETCOLS.EMAILS].split(",");
       }else{      
-        emails = new Array(account_data[EMAILS_SHEETROW]);
+        emails = new Array(account_data[SHEETCOLS.EMAILS]);
       }
     }
 
     // Check if the email address is valid
-    if(emails != null){
+    if(emails !== null){
       for(var i = 0; i < emails.length; i++){
-        if(!validateEmail(emails[i].trim())){
-          valid=false;
-          Logger.log("invalid email "+emails[i].trim());
+        if(emails[i] !== null && emails[i].length > 1){
+            if (!validateEmail(emails[i].trim())) {
+                valid = false;
+                Logger.log("invalid email " + emails[i].trim());
+            }
         }
       }
     }
@@ -258,22 +275,24 @@ function extractAndCheckEmail(account_data){
 function finalExecution(results)
 {
 
+   var offset = 7;
+
    for (var i = 0; i < results.length; i++) {
     // turn the returned value back into a JavaScript object.
      var resultsObject = JSON.parse(results[i].getReturnValue()); 
      var scriptErrors = '';
      
      // if a return value was returned and an error message found, set it as error
-     if(resultsObject && resultsObject.errors != null){
+     if(resultsObject && resultsObject.errors !== null){
       scriptErrors =  scriptErrors+resultsObject.errors;
      }    
 
      // if any other kind of script error occured (overrides the lower prioritized errors!)
-     if(results[i].getError() != null){
+     if(results[i].getError() !== null){
        scriptErrors = scriptErrors+results[i].getError();
      }
 
-     if(resultsObject != null){
+     if(resultsObject !== null){
        Logger.log("new reactivated: "+resultsObject.activated_count);
        Logger.log("new paused: "+resultsObject.paused_count);
        Logger.log("paused campaigns by script: "+resultsObject.paused_campaigns);
@@ -281,18 +300,21 @@ function finalExecution(results)
        Logger.log("index: "+resultsObject.sheet_current_row_index);
        
        // Write number of paused campaigns by script to sheet
-       SHEET.getRange('F'+(resultsObject.sheet_current_row_index+OFFSET_TO_TOP)).setValue(resultsObject.paused_campaigns+resultsObject.paused_shopping_campaigns);
+       SHEET.getRange('F'+(resultsObject.sheet_current_row_index+offset)).setValue(resultsObject.paused_campaigns+resultsObject.paused_shopping_campaigns);
+       
+       // Write number of paused campaigns by script to sheet
+       SHEET.getRange('F'+(resultsObject.sheet_current_row_index+offset)).setValue(resultsObject.paused_campaigns+resultsObject.paused_shopping_campaigns);
        if(scriptErrors != ''){      
         // Write errors based on an account to sheet
-         SHEET.getRange('L'+(resultsObject.sheet_current_row_index+OFFSET_TO_TOP)).setValue(scriptErrors); 
+         SHEET.getRange('L'+(resultsObject.sheet_current_row_index+offset)).setValue(scriptErrors); 
        }else{
         // Remove errors from sheet
-         SHEET.getRange('L'+(resultsObject.sheet_current_row_index+OFFSET_TO_TOP)).setValue('');  
+         SHEET.getRange('L'+(resultsObject.sheet_current_row_index+offset)).setValue('');  
        }
        
        // Send an email if addresses were found and changes were made or an error occured
-       if(resultsObject.emails != null && (resultsObject.activated_count + resultsObject.paused_count > 0) || scriptErrors != ''){
-         if(scriptErrors == ''){ scriptErrors = null; }
+       if(resultsObject.emails !== null && (resultsObject.activated_count + resultsObject.paused_count > 0) || scriptErrors !== ''){
+         if(scriptErrors === ''){ scriptErrors = null; }
          // Generate the eMail-Template
          var emailcontent = generateEmailContent(resultsObject, scriptErrors);
          // Send eMail
@@ -300,7 +322,9 @@ function finalExecution(results)
        }       
      }else{
          // Write script errors to sheet
-         SHEET.getRange('L'+(OFFSET_TO_TOP)).setValue(scriptErrors);
+         if(scriptErrors !== ''){
+             SHEET.getRange('L'+offset).setValue(scriptErrors);
+         }
      }
    }
 }
@@ -342,7 +366,7 @@ function generateEmailContent(dataObj, errors){
       strVar += "";   
 
       // if an error message was handed over
-      if(errors != null){
+      if(errors !== null){
        strVar += "<div style=\"padding:5px;font-family:Sans-Serif; background-color:red;\">";
        strVar += "<span style='color:#ffffff;font-family:Sans-Serif'><b>errors occurs: "+errors+"<\/b><\/span><br\/>";
        strVar += "<\/div>";
@@ -359,10 +383,10 @@ function generateEmailContent(dataObj, errors){
   * @param Object[][] data - the rectangular grid of values for this range
   * @return Object[][] - grid of values for this range
 */  
-function cleanSpreadsheedData(data){
+function checkSpreadsheedData(data){
   var cleanedData = [];
   for(var i=0; i<data.length; i++){
-    if(data[i][0].length > 0 && data[i][1].length > 0){
+    if(data[i][SHEETCOLS.ACCOUNT_IDS].length > 0 && data[i][SHEETCOLS.ACCOUNTNAMES].length > 0){
       cleanedData.push(data[i]);
     }
   }
@@ -377,7 +401,7 @@ function cleanSpreadsheedData(data){
 function getColumnFromRange(data, colnumber){
   var column = [];
   for(var i=0; i<data.length; i++){
-    column.push(data[i][colnumber])
+    column.push(data[i][colnumber]);
   }
   return column;
 }
@@ -388,7 +412,7 @@ function getColumnFromRange(data, colnumber){
   * @return Object[] - values for this row
 */  
 function getRowInRangeById(data, id){
-  var ids = getColumnFromRange(data, ACCOUNT_IDS_SHEETROW);
+  var ids = getColumnFromRange(data, SHEETCOLS.ACCOUNT_IDS);
   if(ids.indexOf(id) > -1){
     return data[ids.indexOf(id)];
   }
