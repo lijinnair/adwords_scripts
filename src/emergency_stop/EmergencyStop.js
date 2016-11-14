@@ -22,7 +22,7 @@
 ***********************************************************************************************/
 
 // Script Settings
-var SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1Cad0D7_GWfvUwrQoN_lW0vb8sSTCpNh22r4HkLb6FMw/edit#gid=325670813";
+var SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1Cad0D7_GWfvUwrQoN_lW0vb8sSTCpNh22r4HkLb6FMw/";
 var PAUSED_LABEL = "EmergencyStop";
 var EMAIL_SUBJECT = "EmergencyStop";
 
@@ -62,7 +62,7 @@ var actionEnum = {
   * @desc This Function will be called from google to start the script
 */
 function main() {  
-  if(SPREADSHEET_URL == 'https://docs.google.com/spreadsheets/d/1Cad0D7_GWfvUwrQoN_lW0vb8sSTCpNh22r4HkLb6FMw/edit#gid=325670813'){
+  if(SPREADSHEET_URL == 'https://docs.google.com/spreadsheets/d/1Cad0D7_GWfvUwrQoN_lW0vb8sSTCpNh22r4HkLb6FMw/'){
         throw 'SPREADSHEET_URL WAS NOT REPLACED TO YOUR OWN SPREADSHEET!';
   }
   
@@ -303,8 +303,6 @@ function finalExecution(results)
        // Write number of paused campaigns by script to sheet
        SHEET.getRange('F'+(resultsObject.sheet_current_row_index+offset)).setValue(resultsObject.paused_campaigns+resultsObject.paused_shopping_campaigns);
        
-       // Write number of paused campaigns by script to sheet
-       SHEET.getRange('F'+(resultsObject.sheet_current_row_index+offset)).setValue(resultsObject.paused_campaigns+resultsObject.paused_shopping_campaigns);
        if(scriptErrors != ''){      
         // Write errors based on an account to sheet
          SHEET.getRange('L'+(resultsObject.sheet_current_row_index+offset)).setValue(scriptErrors); 
@@ -473,8 +471,10 @@ function pauseLabelExists(labelsIter) {
 function pauseCampaign(campaign){
   if(campaign.isEnabled()){      
           if(! campaignHasPausedLabel(campaign)){
-            campaign.pause();
-            campaign.applyLabel(PAUSED_LABEL);
+            if (!AdWordsApp.getExecutionInfo().isPreview()) {
+              campaign.pause();
+              campaign.applyLabel(PAUSED_LABEL);
+            }
             return true;
           }
   }
@@ -489,8 +489,10 @@ function pauseCampaign(campaign){
 function activateCampaign(campaign){
  if(campaign.isPaused()){
           if(campaignHasPausedLabel(campaign)){
-            campaign.enable();
-            campaign.removeLabel(PAUSED_LABEL);
+            if (!AdWordsApp.getExecutionInfo().isPreview()) {
+              campaign.enable();
+              campaign.removeLabel(PAUSED_LABEL);
+            }
             return true;
           }
         }
