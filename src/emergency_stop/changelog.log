@@ -1,0 +1,4 @@
+Changes in Version 1.1
+- Fixed problem with label in preview mode.
+- Added spreadsheet url check
+- Additional preview checks (e.g. no email in preview mode)
