@@ -17,7 +17,7 @@ class findSearchQueries(spreadsheetUrl: String) {
   val scriptName = "Shopping SQRs for Search"
   val scriptVersion = "1.0"
   val scriptAuthor = "Heiko von Raussendorff"
-  val scriptChangeLog = ""
+  val scriptChangeLog = "2016-11-17 Fixed Conversion Column Name"
   val scriptLicense = """
                       |Copyright 2015 crealytics GmbH
                       |
@@ -46,7 +46,7 @@ class findSearchQueries(spreadsheetUrl: String) {
   val shoppingCampaignIterator = AdWordsApp
     .shoppingCampaigns()
     .withCondition("Impressions > 100")
-    .forDateRange("LAST_30_DAYS")
+    .forDateRange("LAST_30_DAYS",null)
     .get();
   val shoppingCampaignIds = shoppingCampaignIterator.toList.map(c => c.asInstanceOf[js.Dynamic].getId().toString())
   val kpiCondition = buildKpiQuery(config)
@@ -55,15 +55,15 @@ class findSearchQueries(spreadsheetUrl: String) {
 
   // Get search queries of shopping campaigns
   val query = s"""
-              |SELECT Query, Impressions, Clicks, Cost, Ctr, ConvertedClicks, AverageCpc, CostPerConvertedClick,
-              | ValuePerConvertedClick, ClickConversionRate, ConversionValue
+              |SELECT Query, Impressions, Clicks, Cost, Ctr, Conversions, AverageCpc, CostPerConversion,
+              | ValuePerConversion, ClickConversionRate, ConversionValue
               |FROM SEARCH_QUERY_PERFORMANCE_REPORT
               |WHERE
               | CampaignId IN [${shoppingCampaignIds.mkString(",")}]
               | $kpiCondition
               |DURING $dateRange""".stripMargin
 
-  val report = AdWordsApp.report(query)
+  val report = AdWordsApp.report(query,null)
 
   // Read all rows and cast to dictionary because we want to use arbitrary fields
   val searchQueryPerformances = report.rows()
@@ -119,7 +119,7 @@ class findSearchQueries(spreadsheetUrl: String) {
 
   for ((keywordProposal, index) <- keywordProposalsWithPerformance.zipWithIndex) {
 
-    val perf = List("Impressions", "Clicks", "Ctr", "ConvertedClicks", "Cost", "AverageCpc", "CostPerConvertedClick", "ValuePerConvertedClick", "ClickConversionRate", "ConversionValue").map(keywordProposal)
+    val perf = List("Impressions", "Clicks", "Ctr", "Conversions", "Cost", "AverageCpc", "CostPerConversion", "ValuePerConversion", "ClickConversionRate", "ConversionValue").map(keywordProposal)
     val newRow = js.Array("", (index + 1).toString, keywordProposal("Query")) ++ perf
 
     exportSheet.appendRow(newRow)
